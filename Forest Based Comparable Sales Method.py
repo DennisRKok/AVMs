@@ -6,9 +6,9 @@ from datetime import datetime
 import numpy as np
 import concurrent.futures
 from numba import vectorize
-"""
-test
-"""
+'''
+This file contains the code for the Forest Based Comparable Sales Method made by D.R. Kok for his thesis at the TU/e. 
+'''
 
 
 
@@ -81,29 +81,22 @@ class ProposedModel:
     def predict(self, test_set):
         self.test_set = test_set.rename_axis("target_id")
         self.test_set["RDOS"] = 0
-        #1. potential neighborhood bepalen adhv de getrainde forest
 
         self.forest_based_neighborhood()
 
 
         self.similarity_score()
 
-        #2. add distance factor
         self.distance_score()
 
-        #3. Add temporal factor
         self.temporal_score()
 
-        #4. Calculate comparability score 
         self.comparability_score()
 
-        #5. Get K neighbors
         self.nearest_neighbors()
 
-        #4. per neighbor adjustmentfactors toepassen
         self.adjustment_factors()
 
-        #5. neighbor predictions combineren door aggregatiefunctie
         self.aggregator()
 
         return self.predictions
