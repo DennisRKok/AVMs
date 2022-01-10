@@ -6,6 +6,10 @@ from datetime import datetime
 import numpy as np
 import concurrent.futures
 from numba import vectorize
+"""
+test
+"""
+
 
 
 class ProposedModel:
@@ -169,8 +173,6 @@ class ProposedModel:
     def train_adjustment_factors(self):       
         X_training = self.training_set.drop([self.dep_var, "longitude", "latitude"], axis= 1)
         y_training = self.training_set[self.dep_var]
-
-        # als ik de variabelen nog wil transformeren dan moet ik dat hier doen, daarnaast wil ik ook LASSO toepassen
         
         if self.transformation == 'semi-log':
             y_training = np.log(y_training.astype(float))
