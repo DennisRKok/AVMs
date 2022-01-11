@@ -6,11 +6,10 @@ from datetime import datetime
 import numpy as np
 import concurrent.futures
 from numba import vectorize
-'''
-This file contains the code for the Forest Based Comparable Sales Method made by D.R. Kok for his thesis at the TU/e. 
-'''
 
-
+'''
+This file contains the code for the Forest Based Comparable Sales Method made by D.R. Kok for his thesis at the TU/e.
+'''
 
 class ProposedModel:
     def __init__(self,
@@ -49,7 +48,6 @@ class ProposedModel:
 
         self.hyperparameter_check()
     
-
     def hyperparameter_check(self):
         
         if self.nr_trees % 10 != 0:
@@ -64,6 +62,11 @@ class ProposedModel:
 
 
     def fit(self, training_set, dep_var):
+        '''
+        This function is used for fitting the model. It takes as input the training set and the name of the dependend variable. 
+        It then trains the forest as well as the adjustment factors. 
+        '''
+        
         if self.invalid_hyperparameter == True:
             print('This model contains invalid hyperparameters, please initialize a valid model.')
             return
@@ -77,13 +80,16 @@ class ProposedModel:
 
         return self
 
-
     def predict(self, test_set):
+        '''
+        With the predict function the predictions are made for the samples in the test set. It takes the test set (excluding dependent variable) as input
+        and outputs a list with predictions in order. 
+        '''
+        
         self.test_set = test_set.rename_axis("target_id")
         self.test_set["RDOS"] = 0
 
         self.forest_based_neighborhood()
-
 
         self.similarity_score()
 
@@ -103,6 +109,10 @@ class ProposedModel:
     
 
     def MAPE(self, y):
+        '''
+        This function can be called upon to return the test set with the percentage errors of each sample. 
+        It takes as input the list of transaction prices of the test set.
+        '''
         self.test_set = (
             self.test_set.join(self.predictions, on = "target_id")
             .join(y, on = "target_id")
@@ -114,11 +124,15 @@ class ProposedModel:
 
 
     def train_forest(self):
+        '''
+        The train_forest function uses the training set to build the forest. The amount of trees and subset size is determined by the user. 
+        First the subsets of training samples are made for each tree by randomly assigning the correct amount of trees to each sample in the training set. 
+        Then each tree is made using this subset. This tree is build using the build_tree function. Of each tree, all properties and their respective leaf nodes are stored.
+        '''
         trees = list(range(self.nr_trees))
         self.subsets = []
         random.seed(self.random_state)
         
-        #divide all samples over the trees, thus creating subsets for each tree
         for i in trees:
             self.subsets.append([])
 
@@ -127,9 +141,7 @@ class ProposedModel:
                                          int(self.nr_trees * self.subset_size))
             for k in assigned_trees:
                 self.subsets[k].append(i)    
-
-        #for each subset a tree is made. Following the fitting of the tree,
-        #for each leaf, the indices of the properties are stored. 
+               
         self.forest = []
         self.properties_per_leaf_forest = []
 
@@ -144,7 +156,11 @@ class ProposedModel:
 
 
     def build_tree(self, tree_id):
-
+        '''
+        This function build each tree of the forest using the DecisionTreeRegressor from Scikit-Learn. 
+        The leaf in which each training sample ends up in is stored in order to create the neighborhood for each target sample.
+        '''
+        
         subset = self.training_set.loc[self.subsets[tree_id]]
         y = subset[self.dep_var]
         X = subset.drop([self.dep_var], axis = 1)
@@ -164,6 +180,10 @@ class ProposedModel:
     
 
     def train_adjustment_factors(self):       
+        '''
+        The coefficients for the adjustment factors are determined through multiple linear regression. 
+        If a transformation is needed, this is performed before fitting the linear regression.
+        '''
         X_training = self.training_set.drop([self.dep_var, "longitude", "latitude"], axis= 1)
         y_training = self.training_set[self.dep_var]
         
