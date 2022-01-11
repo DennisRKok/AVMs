@@ -3,7 +3,7 @@
 I'm Dennis Kok, student Master Operations Management & Logistics at the TU/e. This repository contains the models made for my thesis 
 called 'Designing an explainable and accurate comparable sales method for residential real estate.'. 
 
-# About the scripts
+## About the scripts
 This repository consists of two python files. The first file contains the novel Forest Based Comparable Sales Method. 
 This model was designed to be both explainable and accurate in prediction residential real estate prices. 
 The second file contains the Quantitative Comparative Approach. 
