@@ -3,6 +3,14 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 
+'''
+This file contains the code for the Quantitative Comparative Approach by made I-Cheng Yeh and Tzu-Kuang Hsu 
+proposed in their paper 'Building real estate valuation models with comparative approach through case-based reasoning' (2018).
+It was remade by D.R. Kok for his thesis at the TU/e for the purpose of studying its predictive capabilities in relation to the Forest Based Comparable Sales Method.
+Notes on the hyperparameters:
+- transformation has three possible entries: None, 'semi-log' and 'log-log'.
+'''
+
 class QCA:
     def __init__(
                 self,
@@ -23,6 +31,11 @@ class QCA:
 
     
     def fit(self, training_set, dep_var):
+        '''
+        This function is used for fitting the model. It takes as input the training set and the name of the dependend variable. 
+        It then trains the adjustment coefficients. 
+        '''
+        
         self.training_set = training_set.rename_axis("comparable_id")
         self.dep_var = dep_var
 
@@ -31,6 +44,11 @@ class QCA:
         return self
     
     def predict(self, test_set):
+        '''
+        With the predict function the predictions are made for the samples in the test set. It takes the test set (excluding dependent variable) as input
+        and outputs a list with predictions in order. 
+        '''
+        
         self.test_set = test_set.rename_axis("target_id")
         self.test_set["RDOS"] = 0
 
@@ -42,10 +60,17 @@ class QCA:
 
         self.calculate_adj_price()
 
-        self.aggregator()
+        self.integrator()
+        
+        return self.predictions
 
 
     def MAPE(self, y):
+        '''
+        This function can be called upon to return the test set with the percentage errors of each sample. 
+        It takes as input the list of transaction prices of the test set.
+        '''
+        
         self.test_set = (
             self.test_set
             .join(self.predictions, on = "target_id")
@@ -58,6 +83,14 @@ class QCA:
 
 
     def train_adjustmentcoefficients(self):
+        '''
+        This function uses the training set to calculate the adjustment coefficients. 
+        Firstly, the variables are ordered by their importance. 
+        If a transformation of the variables is necessary it is performed before the coefficients are calculated.
+        Then the coefficients are stepwise calculated as described by yeh and Hsu (2018)
+        
+        '''
+        
         self.features_ordered = pd.DataFrame(columns= ['Feature', 'Importance', 'regression_model'])
         for k, v in self.importance.items():
                 self.features_ordered = self.features_ordered.append({'Feature': k, 
@@ -113,6 +146,12 @@ class QCA:
         self.predictions_adj_factor_comp.index = self.training_set.index
 
     def calculate_distance(self):
+        '''
+        The multidimensional distance is calculated with a weighted mahanalobis distance. 
+        Firstly the necessary transformations are performed. Then the neighborhood is created by combining the comparables with the targets.
+        This combined table is used to calculated the multidimensional distance. 
+        '''
+        
         if self.transformation == 'log-log':
             self.test_set['FloorArea'] = np.log(self.test_set[['FloorArea']].astype(float))
             self.test_set['LotSize'] = np.log(self.test_set[['LotSize']].astype(float))
@@ -164,6 +203,10 @@ class QCA:
         
 
     def get_neighborhood(self):
+        '''
+        The final neighborhood is determined by sorting the potential neighborhoods and selecting the K comparables with the highest lowest distance.
+        '''
+        
         self.neighborhood = (
             self.neighborhood
             .sort_values("distance", ascending=True)
@@ -174,10 +217,20 @@ class QCA:
 
 
     def calculate_weight(self):
+        '''
+        The weight for the weighted average integration formula is calculated by transforming the distance value 
+        using an exponential function with a user determined effect radius.
+        '''
+        
         self.neighborhood['weight'] = np.exp(-((self.neighborhood['distance']/self.effect_radius)**2))
 
 
     def calculate_adj_price(self):
+        '''
+        The comparable predictions are calculated using the adjustment coefficients calculated in the function 'train_adjustmentcoefficients'.
+        
+        '''
+        
         predictions_adj_factor_target = pd.DataFrame(columns= self.predictions_adj_factor_comp.columns)
         for feature in predictions_adj_factor_target.columns:
             if feature == 'lon_lat':
@@ -208,7 +261,7 @@ class QCA:
         if self.transformation == 'semi-log' or self.transformation == 'log-log':
             self.neighborhood['adj_price'] = np.exp(self.neighborhood['adj_price'])
 
-    def aggregator(self):
+    def integrator(self):
         total_weight = self.neighborhood.groupby("target_id")["weight"].sum()
         prediction_times_weight = self.neighborhood["weight"] \
                                 * self.neighborhood['adj_price']
