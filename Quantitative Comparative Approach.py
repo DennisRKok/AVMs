@@ -228,7 +228,6 @@ class QCA:
     def calculate_adj_price(self):
         '''
         The comparable predictions are calculated using the adjustment coefficients calculated in the function 'train_adjustmentcoefficients'.
-        
         '''
         
         predictions_adj_factor_target = pd.DataFrame(columns= self.predictions_adj_factor_comp.columns)
@@ -262,6 +261,11 @@ class QCA:
             self.neighborhood['adj_price'] = np.exp(self.neighborhood['adj_price'])
 
     def integrator(self):
+        '''
+        The comparable predictions are integrated into a final prediction using a weighted average. 
+        The weights are determined by the exponential function in the function 'calculate_weight'.
+        '''
+        
         total_weight = self.neighborhood.groupby("target_id")["weight"].sum()
         prediction_times_weight = self.neighborhood["weight"] \
                                 * self.neighborhood['adj_price']
