@@ -9,6 +9,11 @@ from numba import vectorize
 
 '''
 This file contains the code for the Forest Based Comparable Sales Method made by D.R. Kok for his thesis at the TU/e.
+Notes on the hyperparameters:
+- nr_trees need to be in stepsize 10
+- subset_size needs to be between 0.1 and 1 with a stepsize of 0.1
+- int_function has three possible entries: None, 'avg' and 'weighted_avg'
+- transformation has three possible entries: None, 'semi-log' and 'log-log'
 '''
 
 class ProposedModel:
@@ -21,7 +26,7 @@ class ProposedModel:
                  distance_factor = 1,
                  temporal_factor = 1,
                  K = 5,
-                 agg_function = 'weighted_avg',
+                 int_function = 'weighted_avg',
                  transformation = None,
                  random_state = None):
         self.nr_trees = nr_trees
@@ -32,7 +37,7 @@ class ProposedModel:
         self.distance_factor = distance_factor
         self.temporal_factor = temporal_factor
         self.K = K
-        self.agg_function = agg_function
+        self.int_function = int_function
         self.transformation = transformation
         self.random_state = random_state
         
@@ -49,6 +54,9 @@ class ProposedModel:
         self.hyperparameter_check()
     
     def hyperparameter_check(self):
+        '''
+        This function contains a few checks for the input parameters.
+        '''
         
         if self.nr_trees % 10 != 0:
             self.invalid_hyperparameter = True
@@ -56,9 +64,9 @@ class ProposedModel:
         if self.subset_size * 10 % 1 != 0 or self.subset_size > 1 or self.subset_size < 0:
             self.invalid_hyperparameter = True
             print(f'A subset size of {self.subset_size} is not a valid hyperparameter. Please initialize a valid model.')
-        if self.agg_function != 'avg' and self.agg_function != 'weighted_avg':
+        if self.int_function != 'avg' and self.int_function != 'weighted_avg':
             self.invalid_hyperparameter = True
-            print(f'"{self.agg_function}" is not a valid aggregation function. Please initialize a valid model.')
+            print(f'"{self.int_function}" is not a valid intregation function. Please initialize a valid model.')
 
 
     def fit(self, training_set, dep_var):
@@ -103,7 +111,7 @@ class ProposedModel:
 
         self.adjustment_factors()
 
-        self.aggregator()
+        self.integrator()
 
         return self.predictions
     
@@ -202,6 +210,11 @@ class ProposedModel:
     
 
     def forest_based_neighborhood(self):
+        '''
+        This is the first function for predicting the values of the target properties. 
+        It finds in which leaf of each tree the target property lands and finds all training properties in the same leaves.
+        '''
+        
         #find in wich leaf per tree the target property lands and get all
         #comparables in that leaf and store these. 
         X = self.test_set
@@ -221,6 +234,12 @@ class ProposedModel:
 
         
     def similarity_score(self):
+        '''
+        This function calculates the similarity score for each of the comparables in the potential neighborhood. 
+        It counts how often a comparable ends up in the same leaf as the target. 
+        Then it calculates the similarity as a fraction of actual same end leaves and possible same end leaves.
+        '''
+        
         #count how often a comparable ends up in the same leaf as the target.
         #calculate the similarity as a fraction of actual same end leaves and
         #possible same end leaves.
@@ -233,6 +252,12 @@ class ProposedModel:
         
 
     def distance_score(self):
+        '''
+        The distance score is calculated using the spatial distance between the comparable and the target property.
+        It calculates this distance with the geographical coordinates. 
+        A separate vectorized function is used for this calculation to speed up the computation time. 
+        '''
+        
         self.neighborhood = (
             self.neighborhood.join(self.test_set[["longitude", "latitude"]], on = "target_id")
             .rename(columns= {"longitude": "longitude_target", "latitude": "latitude_target"})
@@ -258,6 +283,11 @@ class ProposedModel:
 
     @vectorize
     def calculate_distance(bandwidth, longitude_target, latitude_target, longitude, latitude):
+        '''
+        This is the vectorized distance function. It is a simple but effective formula for calculating the distance between to geographical points.
+        It is an approximation as it disregards the curvature of the earth and uses a fixed value for the longitude factor. 
+        However, this is accurate enough for calculations in the Netherlands.
+        '''
         distance = np.sqrt(
                         ((latitude_target - latitude) * 111.32) ** 2
                         + ((longitude_target - longitude) * 68.29) ** 2
@@ -272,12 +302,22 @@ class ProposedModel:
                                     
 
     def temporal_score(self):
+        '''
+        The temporal score is a linear degrading function which calculates a score between 0 and 100 
+        by using the temporal distance in days between the transaction date and the day after the end of the training set window.
+        '''
+        
         max_days = self.training_set["RDOS"].max()
-        self.neighborhood["temporal_score"] = 100 - (self.neighborhood["RDOS"] / max_days * 100)
+        self.neighborhood["temporal_score"] = 100 - ((self.neighborhood["RDOS"] - 1) / (max_days - 1) * 100)
         self.neighborhood = self.neighborhood.drop("RDOS", axis = 1)
 
 
     def comparability_score(self):
+        '''
+        The comparability score is the combination of the three scores above by way of weighted average. 
+        The weights are factors determined by the user in the hyperparameters 'distance_score' and 'temporal_score' the weight for the similarity score is set to 1.
+        '''
+        
         self.neighborhood["comparability_score"] = (
             (
             self.neighborhood["similarity_score"]
@@ -289,6 +329,10 @@ class ProposedModel:
 
     
     def nearest_neighbors(self):
+        '''
+        The final neighorbhood is determined by sorting the potential neighborhoods and selecting the K comparables with the highest comparability score.
+        '''
+       
         self.neighborhood = (
             self.neighborhood.sort_values("comparability_score", ascending=False)
             .sort_index(level = "target_id", sort_remaining = False)
@@ -297,6 +341,12 @@ class ProposedModel:
         
     
     def adjustment_factors(self):
+        '''
+        The multiple linear regression built in the function 'train_adjustment_factors' is used to predict values for all neighbors and targets. 
+        The difference between the neighbor and target is added to the transaction price of the neighbor to get the comparable prediction. 
+        Transformations are performed if necessary.
+        '''
+        
         # hier moet de berekening van predicted price per comparable komen
         # ik kan gewoon het verschil tussen de predicted value van de target
         # en van de comparable optellen bij de waarde van de comparable. 
@@ -339,9 +389,14 @@ class ProposedModel:
         )
 
 
-    def aggregator(self):
+    def integrator(self):
+        '''
+        This is the integration function. Both the average and weighted average are options, chosen as a hyperparameter by the user. 
+        The weight in the weighted average is the comparability score of the concerned neighbor.
+        '''
+        
         # weighted average
-        if self.agg_function == 'weighted_avg':
+        if self.int_function == 'weighted_avg':
             total_weight = self.neighborhood.groupby("target_id")["comparability_score"].sum()
             prediction_times_weight = self.neighborhood["comparability_score"] \
                                     * self.neighborhood["comparable_prediction"]
@@ -351,7 +406,7 @@ class ProposedModel:
             self.predictions = self.predictions.rename(columns= {0: "prediction"})
 
         # average     
-        elif self.agg_function == 'avg':
+        elif self.int_function == 'avg':
             self.predictions = self.neighborhood["comparable_prediction"].groupby("target_id").mean()
             self.predictions = pd.DataFrame(self.predictions)
             self.predictions = self.predictions.rename(columns= {"comparable_prediction": "prediction"})
