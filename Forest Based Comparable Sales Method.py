@@ -215,8 +215,6 @@ class ProposedModel:
         It finds in which leaf of each tree the target property lands and finds all training properties in the same leaves.
         '''
         
-        #find in wich leaf per tree the target property lands and get all
-        #comparables in that leaf and store these. 
         X = self.test_set
         self.neighborhood = np.empty((0,2), int)
         for i in range(len(self.forest)):
@@ -239,10 +237,7 @@ class ProposedModel:
         It counts how often a comparable ends up in the same leaf as the target. 
         Then it calculates the similarity as a fraction of actual same end leaves and possible same end leaves.
         '''
-        
-        #count how often a comparable ends up in the same leaf as the target.
-        #calculate the similarity as a fraction of actual same end leaves and
-        #possible same end leaves.
+
         self.neighborhood = (
             pd.DataFrame(self.neighborhood.groupby(["target_id", "comparable_id"]).size())
             .rename(columns={0: "similarity_score"})
@@ -346,10 +341,7 @@ class ProposedModel:
         The difference between the neighbor and target is added to the transaction price of the neighbor to get the comparable prediction. 
         Transformations are performed if necessary.
         '''
-        
-        # hier moet de berekening van predicted price per comparable komen
-        # ik kan gewoon het verschil tussen de predicted value van de target
-        # en van de comparable optellen bij de waarde van de comparable. 
+
         X_targets = self.test_set.drop(["longitude", "latitude"], axis = 1)
 
         if self.transformation == 'log-log':
@@ -395,7 +387,6 @@ class ProposedModel:
         The weight in the weighted average is the comparability score of the concerned neighbor.
         '''
         
-        # weighted average
         if self.int_function == 'weighted_avg':
             total_weight = self.neighborhood.groupby("target_id")["comparability_score"].sum()
             prediction_times_weight = self.neighborhood["comparability_score"] \
@@ -405,7 +396,6 @@ class ProposedModel:
             self.predictions = pd.DataFrame(self.predictions)
             self.predictions = self.predictions.rename(columns= {0: "prediction"})
 
-        # average     
         elif self.int_function == 'avg':
             self.predictions = self.neighborhood["comparable_prediction"].groupby("target_id").mean()
             self.predictions = pd.DataFrame(self.predictions)
